@@ -8,5 +8,5 @@ def generate_options_keyboard(answer_options, correct_option):
             text=option,
             callback_data=f"answer_{index}_{correct_option}")
         )
-    builder.adjust(4)
+    builder.adjust(1)
     return builder.as_markup()
