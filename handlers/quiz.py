@@ -15,23 +15,23 @@ async def cmd_quiz(message: types.Message):
     await message.answer("Давайте начнем квиз!")
     await new_quiz(message)
 
-user_correct_answers = {}
 
 async def new_quiz(message):
     user_id = message.from_user.id
 
-    # Сбрасываем счетчик в БД
+    # Cуществование записи
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute('''
-            INSERT OR REPLACE INTO quiz_state 
+            INSERT OR IGNORE INTO quiz_state 
             (user_id, question_index, correct_answers) 
             VALUES (?, 0, 0)
         ''', (user_id,))
+        await db.execute('''
+            UPDATE quiz_state 
+            SET question_index = 0, correct_answers = 0 
+            WHERE user_id = ?
+        ''', (user_id,))
         await db.commit()
-
-    # Сбрасываем локальный счетчик
-    if user_id in user_correct_answers:
-        del user_correct_answers[user_id]
 
     await get_question(message, user_id)
 

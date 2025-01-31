@@ -1,14 +1,18 @@
+import logging
 from aiogram import Router, types, F
 import aiosqlite
-from database import DB_NAME  
-from database import (update_quiz_index, get_quiz_index, save_quiz_result)
+from database import (
+    DB_NAME,
+    update_quiz_index,
+    get_quiz_index,
+    save_quiz_result,
+    increment_correct_answers,
+    get_correct_answers
+)
 from data.quiz_data import quiz_data
 from keyboards import generate_options_keyboard
 
 router = Router()
-
-# Создаем словарь для хранения правильных ответов для каждого пользователя
-user_correct_answers = {}
 
 @router.callback_query(F.data.startswith("answer_"))
 async def answer_handler(callback: types.CallbackQuery):
@@ -16,10 +20,6 @@ async def answer_handler(callback: types.CallbackQuery):
     data_parts = callback.data.split('_')
     selected_option = int(data_parts[1])
     correct_option = int(data_parts[2])
-
-    # Локальное хранилище правильных ответов
-    if user_id not in user_correct_answers:
-        user_correct_answers[user_id] = 0
 
     await callback.bot.edit_message_reply_markup(
         chat_id=user_id,
@@ -33,7 +33,7 @@ async def answer_handler(callback: types.CallbackQuery):
     correct_text = question_data['options'][correct_option]
 
     if selected_option == correct_option:
-        user_correct_answers[user_id] += 1  # Инкрементируем локально
+        await increment_correct_answers(user_id)
         await callback.message.answer(f"✅ Вы выбрали: {selected_text}. Верно!")
     else:
         await callback.message.answer(f"❌ Вы выбрали: {selected_text}. Неверно. Правильный ответ: {correct_text}")
@@ -44,13 +44,12 @@ async def answer_handler(callback: types.CallbackQuery):
     if current_question_index < len(quiz_data):
         await get_question(callback.message, user_id)
     else:
-        # В конце квиза сохраняем результат в базу данных
-        correct_answers = user_correct_answers.get(user_id, 0)
+        correct_answers = await get_correct_answers(user_id)
+        logging.debug(f"Количество правильных ответов  {correct_answers}")
         total_questions = len(quiz_data)
         await save_quiz_result(user_id, correct_answers, total_questions)
         await callback.message.answer(f"🏁 Квиз завершен! Правильных ответов: {correct_answers}/{total_questions}")
         await reset_counter(user_id)
-        
 
 async def get_question(message, user_id):
     current_question_index = await get_quiz_index(user_id)
@@ -69,7 +68,3 @@ async def reset_counter(user_id):
             (user_id,)
         )
         await db.commit()
-    
-    # Очищаем локальное хранилище
-    if user_id in user_correct_answers:
-        del user_correct_answers[user_id]
