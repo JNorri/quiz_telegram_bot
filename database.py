@@ -5,9 +5,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 DB_NAME = 'quiz_bot.db'
 
-if os.path.exists("quiz_bot.db"):
-    os.remove("quiz_bot.db")
-
+# if os.path.exists(DB_NAME):
+#     os.remove(DB_NAME)
 
 async def create_table():
     async with aiosqlite.connect(DB_NAME) as db:
@@ -18,14 +17,12 @@ async def create_table():
                                 correct_answers INTEGER DEFAULT 0);''')
         await db.execute('''DROP TABLE IF EXISTS quiz_results;''')
         await db.execute('''CREATE TABLE IF NOT EXISTS quiz_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    score INTEGER,
-    total_questions INTEGER,
-    last_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP);''')
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                user_id INTEGER,
+                                score INTEGER,
+                                total_questions INTEGER,
+                                last_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP);''')
         await db.commit()
-
-
 
 async def get_quiz_index(user_id):
     async with aiosqlite.connect(DB_NAME) as db:
@@ -35,7 +32,14 @@ async def get_quiz_index(user_id):
 
 async def update_quiz_index(user_id, index):
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('INSERT OR REPLACE INTO quiz_state (user_id, question_index) VALUES (?, ?)', (user_id, index))
+        async with db.execute('SELECT COUNT(*) FROM quiz_state WHERE user_id = ?', (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row[0] > 0:
+                # Если запись существует, обновляем только поле question_index,
+                await db.execute('UPDATE quiz_state SET question_index = ? WHERE user_id = ?', (index, user_id))
+            else:
+                # Если записи нет, создаем новую запись с начальным значением correct_answers = 0
+                await db.execute('INSERT INTO quiz_state (user_id, question_index, correct_answers) VALUES (?, ?, 0)', (user_id, index))
         await db.commit()
 
 async def increment_correct_answers(user_id):
@@ -48,14 +52,12 @@ async def increment_correct_answers(user_id):
         await db.commit()
     logging.debug(f"Увеличено количество правильных ответов для пользователя {user_id}")
 
-
 async def get_correct_answers(user_id):
     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute('SELECT correct_answers FROM quiz_state WHERE user_id = ?', (user_id,)) as cursor:
             result = await cursor.fetchone()
             logging.debug(f"Количество правильных ответов для пользователя {user_id}: {result[0] if result else 0}")
             return result[0] if result else 0
-
 
 async def save_quiz_result(user_id, score, total_questions):
     async with aiosqlite.connect(DB_NAME) as db:
