@@ -89,15 +89,13 @@ async def get_user_stats(user_id):
 
         # Находим моду (самое частое количество правильных ответов)
         async with db.execute('''
-            SELECT score, COUNT(*) as freq 
-            FROM quiz_results 
-            WHERE user_id = ? 
-            GROUP BY score 
-            ORDER BY freq DESC, score DESC 
-            LIMIT 1
+            SELECT ROUND(AVG(score))
+            FROM quiz_results
+            WHERE user_id = ?
         ''', (user_id,)) as cursor:
-            mode_row = await cursor.fetchone()
-            mode_score = mode_row[0] if mode_row else 0
+            avg_row = await cursor.fetchone()
+            avg_score = int(avg_row[0]) if avg_row and avg_row[0] is not None else 0
+
 
         # Лучший результат
         async with db.execute('''
@@ -123,7 +121,7 @@ async def get_user_stats(user_id):
 
         return {
             'total_quizzes': total_stats[0] if total_stats else 0,
-            'mode_score': mode_score,
+            'mode_score': avg_score,
             'best_score': best_score,
             'best_percent': best_percent or 0,
             'quizzes': quizzes
